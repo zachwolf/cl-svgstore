@@ -1,0 +1,31 @@
+{
+  "name": "cl-svgstore",
+  "version": "0.0.0",
+  "description": "command line interface for concatenating svg files to a svg sprite",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zachwolf/cl-svgstore.git"
+  },
+  "keywords": [
+    "command",
+    "line",
+    "svg",
+    "sprite"
+  ],
+  "author": "Zach Wolf",
+  "license": "BSD-2-Clause",
+  "bugs": {
+    "url": "https://github.com/zachwolf/cl-svgstore/issues"
+  },
+  "homepage": "https://github.com/zachwolf/cl-svgstore",
+  "preferGlobal": true,
+  "bin": {
+    "svgstore": "index.js"
+  },
+  "dependencies": {
+    "glob": "~5.0.14"
+  }
+}
