@@ -1,8 +1,8 @@
 #! /usr/bin/env node
 	
-var glob     = require('glob')
-	, fs       = require('fs')
+var fs       = require('fs')
 	, path     = require('path')
+	, glob     = require('glob')
 	, through2 = require('through2')
 	, spigot   = require('stream-spigot')
 	, concat   = require('concat-stream')
