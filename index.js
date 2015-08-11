@@ -29,39 +29,72 @@ function once (fn) {
 	}
 }
 
+/**
+ * A class used for storing, retrieving, and compiling css extracted from SVGs
+ *
+ * @returns {function}
+ */
+var StyleStore = (function () {
+	function StyleStore () {
+		this._ = {}
+		this._.styles = []
+	}
+
+	/**
+	 * function description
+	 *
+	 * @param {string} foo - foo description
+	 * @returns {string}
+	 */
+	StyleStore.prototype.save = function (sourcefilename, content) {
+		this._.styles.push({
+			name: sourcefilename,
+			content: content
+		})
+	}
+
+	/**
+	 * function description
+	 *
+	 * [ ] todo? - compare what styles are present and eliminate duplicates
+	 *
+	 * @param {string} foo - foo description
+	 * @returns {string}
+	 */
+	StyleStore.prototype.compile = function () {
+		return this._.styles.reduce(function (p, c) {
+			return p + ' ' + c.content
+		}, '')
+	}
+
+	return StyleStore
+}())
+
 if (inGlob) {
 	glob(inGlob, function (err, matches) {
 
 		if (err) throw new Error(err)
 
 		var fetchHeader = once(function () {
-			return '<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">'
-		})
+					return '<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">'
+				})
+			, styleStore = new StyleStore()
 
 		/**
-		 * Converts a svg's file contents to a `<symbol>` tag
-		 *
-		 * @param {string} foo - foo description
-		 * @param {string} foo - foo description
-		 * @returns {string}
+		 * Data about a svg file
+		 * 
+		 * @typedef {object} SVGObjectFile
+		 * @property {string} filename - filename
+		 * @property {string} raw - raw html response of file
+		 * @property {object} $svg - cheerio instance of the returned html
 		 */
-		function symbolTpl (filepath, raw) {
-			var $        = cheerio.load(raw)
-				, $svg     = $('svg')
-				, filename = path.parse(filepath).name
-				, contents = $svg.html()
-				, viewBox  = $svg.attr('viewbox') || '0 0 1 1'
-
-		  return '<symbol id="' + filename + '" viewBox="' + viewBox + '">' + contents + '</symbol>'
-		}
-
 		/**
 		 * Converts a file to an svg <symbol> element
 		 *
 		 * @param {buffer} chunk - filename
-		 * @param {number} index - foo description
+		 * @param {number} index - not sure what this is tbh
 		 * @param {function} cb - callback for when process is completed
-		 * @returns {buffer}
+		 * @returns {SVGObjectFile}
 		 */
 		function parseFile (chunk, index, cb) {
 
@@ -69,13 +102,53 @@ if (inGlob) {
 				, filename = chunk.toString('utf-8')
 
 			fs.readFile(filename, function (err, res) {
+
 				if (err) throw new Error(err)
 
-				var compiled = symbolTpl(filename, res.toString('utf-8'))
+				var raw  = res.toString('utf-8')
+					, $    = cheerio.load(raw)
+					, $svg = $('svg')
 
-				self.push(compiled)
-				cb()
+				cb(null, {
+					filename: path.parse(filename).name,
+					raw: raw,
+					$svg: $svg
+				})
 			})
+		}
+
+		/**
+		 * Extracts and concatinates `<style>`s from `SVGObjectFile`s
+		 *
+		 * @param {SVGObjectFile} chunk - file info
+		 * @param {number} index - not sure what this is tbh
+		 * @param {function} cb - callback for when process is completed
+		 * @returns {SVGObjectFile}
+		 */
+		function extractStyle (chunk, index, cb) {
+
+			var styleContent = chunk.$svg.find('style')
+
+			styleStore.save(chunk.filename, styleContent.html())
+
+			styleContent.remove()
+
+			cb(null, chunk)
+		}
+
+		/**
+		 * Converts `SVGObjectFile` to a string representation of the svg `<symbol>`
+		 *
+		 * @param {SVGObjectFile} chunk - file info
+		 * @param {number} index - not sure what this is tbh
+		 * @param {function} cb - callback for when process is completed
+		 * @returns {string}
+		 */
+		function createSymbol (chunk, index, cb) {
+			var contents = chunk.$svg.html()
+				, viewBox  = chunk.$svg.attr('viewbox') || '0 0 1 1'
+
+		  cb(null, '<symbol id="' + chunk.filename + '" viewBox="' + viewBox + '">' + contents + '</symbol>')
 		}
 
 		/**
@@ -85,7 +158,7 @@ if (inGlob) {
 		 * @param {number} index
 		 * @param {function} cb
 		 */
-		function addOpeningTag (chunk, index, cb) {
+		function startFlattenStream (chunk, index, cb) {
 			var header = fetchHeader()
 
 			if (header) {
@@ -100,7 +173,8 @@ if (inGlob) {
 		 *
 		 * @param {function} cb
 		 */
-		function addClosingTag (cb) {
+		function finishFlattenStream (cb) {
+			this.push('<style>' + styleStore.compile() + '</style>') // [] todo? - move this to a stream flush function
 			this.push('</svg>')
 			cb()
 		}
@@ -122,8 +196,10 @@ if (inGlob) {
 
 		// magic
 		spigot(matches)
-			.pipe(through2(parseFile))
-			.pipe(through2(addOpeningTag, addClosingTag))
+			.pipe(through2.obj(parseFile))
+			.pipe(through2.obj(extractStyle))
+			.pipe(through2.obj(createSymbol))
+			.pipe(through2(startFlattenStream, finishFlattenStream))
 			.pipe(getWriteFn())
 
 	})
