@@ -31,6 +31,9 @@ In lieu of a formal styleguide, take care to maintain the existing coding style.
 
 ## Release History
 
+#### 0.1.3
+  * Rework of file write order in preperation of future improvements on CSS parsing
+
 #### 0.1.1
   * Updated readme
 

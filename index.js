@@ -14,22 +14,6 @@ var fs       = require('fs')
 	, outPath  = userArgs[1]
 
 /**
- * a function to be called one time
- *
- * @param {function} fn - function to be called only one time
- * @returns {function}
- */
-function once (fn) {
-	var called = false
-	return function () {
-		if (!called) {
-			called = true
-			return fn()
-		}
-	}
-}
-
-/**
  * A class used for storing, retrieving, and compiling css extracted from SVGs
  *
  * @returns {function}
@@ -75,9 +59,10 @@ if (inGlob) {
 
 		if (err) throw new Error(err)
 
-		var fetchHeader = once(function () {
-					return '<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">'
-				})
+		var svgTag = {
+					open: '<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">\n',
+					close: '\n</svg>'
+				}
 			, styleStore = new StyleStore()
 
 		/**
@@ -126,7 +111,6 @@ if (inGlob) {
 		 * @returns {SVGObjectFile}
 		 */
 		function extractStyle (chunk, index, cb) {
-
 			var styleContent = chunk.$svg.find('style')
 
 			styleStore.save(chunk.filename, styleContent.html())
@@ -152,55 +136,47 @@ if (inGlob) {
 		}
 
 		/**
-		 * Adds opening svg tag
-		 *
-		 * @param {buffer} chunk
-		 * @param {number} index
-		 * @param {function} cb
-		 */
-		function startFlattenStream (chunk, index, cb) {
-			var header = fetchHeader()
-
-			if (header) {
-				this.push(header)
-			}
-
-			cb(null, chunk)
-		}
-
-		/**
-		 * Adds closing svg tag
-		 *
-		 * @param {function} cb
-		 */
-		function finishFlattenStream (cb) {
-			this.push('<style>' + styleStore.compile() + '</style>') // [] todo? - move this to a stream flush function
-			this.push('</svg>')
-			cb()
-		}
-
-		/**
 		 * Conditionally write to a file or the console
 		 *
 		 * @returns {function}
 		 */
-		function getWriteFn () {
-			if (outPath) {
-				return fs.createWriteStream(outPath, { flags : 'w' })
-			} else {
-				return concat({encoding: 'string'}, function (chunk) {
-					process.stdout.write(chunk)
-				})
+		function getWriteStream () {
+			/**
+			 * Curry-ished write file function
+			 *
+			 * @param {Object} _stream - stream to be written to
+			 * @returns {Function}
+			 */
+			function writer (_stream) {
+				return function (chunk) {
+					_stream.write(svgTag.open)
+					_stream.write('<style>\n' + styleStore.compile() + '\n</style>\n')
+					_stream.write(chunk)
+					_stream.write(svgTag.close)
+				}
 			}
+
+			var fn = outPath ?
+								writer(fs.createWriteStream(outPath, { flags : 'w' })) :
+								writer(process.stdout)
+
+			return concat({encoding: 'string'}, fn)
 		}
 
 		// magic
 		spigot(matches)
 			.pipe(through2.obj(parseFile))
-			.pipe(through2.obj(extractStyle))
+			.pipe(through2.obj(extractStyle, function (cb) {
+				// flush the stream
+				// this prevents a race condition where
+				// styles were being compiled before they were stored
+				// 
+				// There's probably a better way to do this, but I'm
+				// no expert on streams
+				cb()
+			}))
 			.pipe(through2.obj(createSymbol))
-			.pipe(through2(startFlattenStream, finishFlattenStream))
-			.pipe(getWriteFn())
+			.pipe(getWriteStream())
 
 	})
 } else {
