@@ -7,11 +7,13 @@ var fs       = require('fs')
 	, spigot   = require('stream-spigot')
 	, concat   = require('concat-stream')
 	, cheerio  = require('cheerio')
+	, css      = require('css')
 
 	// arguments passed from the command line
 	, userArgs = process.argv.slice(2)
 	, inGlob   = userArgs[0]
 	, outPath  = userArgs[1]
+	// , flags    = userArgs[2] // [ ] todo!
 
 /**
  * A class used for storing, retrieving, and compiling css extracted from SVGs
@@ -21,34 +23,104 @@ var fs       = require('fs')
 var StyleStore = (function () {
 	function StyleStore () {
 		this._ = {}
-		this._.styles = []
+		this._.styles = new Map()
 	}
 
 	/**
-	 * function description
+	 * CSS declaration data
+	 * 
+	 * @typedef {Object} DeclarationList
+	 * @property {String} type - describes the declaration type, usually equals 'declaration'
+	 * @property {Object} position - describes the values position in the source file
+	 * @property {String} property - a css property name
+	 * @property {String} value - a css property value
+	 */
+	/**
+	 * Compares style propery/value pairs between two style declarations
 	 *
-	 * @param {string} foo - foo description
-	 * @returns {string}
+	 * [1] if one has more declarations, they're definitely not the same
+	 *
+	 * @param {Array} list1 - list of `DeclarationList` objects to compare against
+	 * @param {Array} list2 - list of `DeclarationList` objects to compare with
+	 * @returns {Boolean}
+	 */
+	function _compareDeclarations (list1, list2) {
+		var same = true
+
+		if (list1.length !== list2.length) return false // [1]
+
+		list1.forEach(function (declaration, key) {
+			var prop = declaration.property
+				, item = list2.filter(function (_item, key) {
+						return _item.property === prop
+					})[0]
+
+			if (item && (declaration.value !== item.value)) {
+				same = false
+			}
+		})
+
+		return same
+	}
+
+	
+
+	/**
+	 * Parses and stores css in a hopefully managable manner
+	 *
+	 * @param {String} sourcefilename - original file's name
+	 * @param {String} content - actual css content
+	 * @returns {Object} - this
 	 */
 	StyleStore.prototype.save = function (sourcefilename, content) {
-		this._.styles.push({
-			name: sourcefilename,
-			content: content
+
+		var parsed  = css.parse(content)
+			, _styles = this._.styles
+
+		/**
+		 * Loop through all styles and compare them
+		 *
+		 * [1] simplest solution, this class name is previously unused
+		 * [2] if the class name declarations are the same, this 
+		 */
+		parsed.stylesheet.rules.forEach(function (rule) {
+			/**
+			 * Loop through all the selectors in a rule
+			 */
+			rule.selectors.forEach(function (name) {
+				if (!_styles.has(name)) { // [1]
+					_styles.set(name, rule)
+				} else {
+					if (!_compareDeclarations(_styles.get(name).declarations, rule.declarations)) { // [2]
+						var _name = ['#' + sourcefilename, name].join(' ')
+						_styles.set(_name, rule)
+					}
+				}
+			})
 		})
+
+		return this
 	}
 
 	/**
 	 * function description
-	 *
-	 * [ ] todo? - compare what styles are present and eliminate duplicates
 	 *
 	 * @param {string} foo - foo description
 	 * @returns {string}
 	 */
 	StyleStore.prototype.compile = function () {
-		return this._.styles.reduce(function (p, c) {
-			return p + ' ' + c.content
-		}, '')
+		var styles = {
+			"type": "stylesheet",
+			"stylesheet": {
+				"rules": []
+			}
+		}
+		
+		for (var key of this._.styles.keys()) {
+			styles.stylesheet.rules.push(this._.styles.get(key))
+		}
+
+		return css.stringify(styles)
 	}
 
 	return StyleStore
