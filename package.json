@@ -1,6 +1,6 @@
 {
   "name": "cl-svgstore",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "command line interface for concatenating svg files to a svg sprite",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

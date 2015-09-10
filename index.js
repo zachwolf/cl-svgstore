@@ -87,12 +87,13 @@ var StyleStore = (function () {
 			/**
 			 * Loop through all the selectors in a rule
 			 */
-			rule.selectors.forEach(function (name) {
+			rule.selectors.forEach(function (name, key) {
 				if (!_styles.has(name)) { // [1]
 					_styles.set(name, rule)
 				} else {
 					if (!_compareDeclarations(_styles.get(name).declarations, rule.declarations)) { // [2]
 						var _name = ['#' + sourcefilename, name].join(' ')
+						rule.selectors[key] = _name
 						_styles.set(_name, rule)
 					}
 				}

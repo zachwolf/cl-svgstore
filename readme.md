@@ -31,6 +31,9 @@ In lieu of a formal styleguide, take care to maintain the existing coding style.
 
 ## Release History
 
+#### 0.2.1
+  * Fixes css parsing not namespacing duplicate classes
+
 #### 0.2.0
   * Adds css parsing!
 
